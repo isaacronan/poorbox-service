@@ -65,14 +65,13 @@ apiRouter.post('/test', (req, res) => {
 apiRouter.post('/config', (req, res) => {
     const isValid = valueSchema.isValidSync(req.body);
     if (isValid) {
-        const { protocol, hostname } = req;
         let id = null;
         do {
             id = crypto.randomBytes(4).toString('hex')
         } while(endpoints.findIndex((endpoint) => endpoint.id === id) !== -1);
         endpoints.push({ schema: req.body, id });
         resetEndpointInterval(id);
-        res.json({ message: 'Created endpoint.', url: `${protocol}://${hostname}:${PORT}${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id });
+        res.json({ message: 'Created endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id });
     } else {
         res.status(400).json({ error: 'Format is invalid.' });
     }
@@ -89,9 +88,8 @@ apiRouter.delete('/config/:id', (req, res) => {
 apiRouter.get('/config/:id', (req, res) => {
     const endpoint = getEndpoint(req.params.id);
     if (endpoint) {
-        const { protocol, hostname } = req;
         const { id, schema } = endpoint;
-        res.json({ message: 'Found endpoint.', url: `${protocol}://${hostname}:${PORT}${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id, schema });
+        res.json({ message: 'Found endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id, schema });
     } else {
         res.status(404).json({ error: 'Endpoint not found.' });
     }
