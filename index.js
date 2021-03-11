@@ -51,7 +51,7 @@ app.get(BASEPATH, (_, res) => {
     res.send(render());
 });
 
-apiRouter.post('/test', (req, res) => {
+apiRouter.post('/test', rateLimitMiddleware(10000, 30), (req, res) => {
     const isValid = valueSchema.isValidSync(req.body);
     if (isValid) {
         getRandomData(req.body).then(data => {
