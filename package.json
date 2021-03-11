@@ -1,7 +1,11 @@
 {
   "name": "poorbox-service",
   "version": "1.0.0",
-  "description": "",
+  "description": "REST service for PoorBox app. Built on Express.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/isaacronan/poorbox-service"
+  },
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
