@@ -6,7 +6,7 @@ const express = require('express');
 const cors = require('cors');
 
 const { valueSchema } = require('./schemae');
-const { getRandomData, rateLimitMiddleware } = require('./utils');
+const { getRandomData, rateLimitMiddleware, getArrayPotential, ARRAY_POTENTIAL_MAX } = require('./utils');
 
 const ssr = require('./ssr/poorbox-ssr');
 const template = fs.readFileSync(path.resolve(__dirname, './ssr/poorbox.html')).toString();
@@ -51,12 +51,17 @@ app.get(BASEPATH, (_, res) => {
     res.send(render());
 });
 
-apiRouter.post('/test', rateLimitMiddleware(10000, 30), (req, res) => {
+apiRouter.post('/test', rateLimitMiddleware(10000, 30), (req, res, next) => {
     const isValid = valueSchema.isValidSync(req.body);
     if (isValid) {
-        getRandomData(req.body).then(data => {
-            res.json(data);
-        }).catch(console.log);
+        const potential = getArrayPotential(req.body);
+        if (potential > ARRAY_POTENTIAL_MAX) {
+            res.status(400).json({ error: `Reduce max array lengths or array nesting. Potential item count may not exceed ${ARRAY_POTENTIAL_MAX}.` });
+        } else {
+            getRandomData(req.body).then(data => {
+                res.json(data);
+            }).catch(next);
+        }
     } else {
         res.status(400).json({ error: 'Format is invalid.' });
     }
@@ -65,13 +70,18 @@ apiRouter.post('/test', rateLimitMiddleware(10000, 30), (req, res) => {
 apiRouter.post('/config', (req, res) => {
     const isValid = valueSchema.isValidSync(req.body);
     if (isValid) {
-        let id = null;
-        do {
-            id = crypto.randomBytes(4).toString('hex')
-        } while(endpoints.findIndex((endpoint) => endpoint.id === id) !== -1);
-        endpoints.push({ schema: req.body, id });
-        resetEndpointInterval(id);
-        res.json({ message: 'Created endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id });
+        const potential = getArrayPotential(req.body);
+        if (potential > ARRAY_POTENTIAL_MAX) {
+            res.status(400).json({ error: `Reduce max array lengths or array nesting. Potential item count may not exceed ${ARRAY_POTENTIAL_MAX}.` });
+        } else {
+            let id = null;
+            do {
+                id = crypto.randomBytes(4).toString('hex')
+            } while(endpoints.findIndex((endpoint) => endpoint.id === id) !== -1);
+            endpoints.push({ schema: req.body, id });
+            resetEndpointInterval(id);
+            res.json({ message: 'Created endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id });
+        }
     } else {
         res.status(400).json({ error: 'Format is invalid.' });
     }
@@ -95,13 +105,13 @@ apiRouter.get('/config/:id', (req, res) => {
     }
 });
 
-apiRouter.get('/:id', cors(), rateLimitMiddleware(10000, 10), (req, res) => {
+apiRouter.get('/:id', cors(), rateLimitMiddleware(10000, 10), (req, res, next) => {
     const endpoint = getEndpoint(req.params.id);
     if (endpoint) {
         resetEndpointInterval(req.params.id);
         getRandomData(endpoint.schema).then(data => {
             res.json(data);
-        }).catch(console.log);
+        }).catch(next);
     } else {
         res.status(404).json({ error: 'Endpoint not found.' });
     }
@@ -109,6 +119,10 @@ apiRouter.get('/:id', cors(), rateLimitMiddleware(10000, 10), (req, res) => {
 
 app.use((_req, res) => {
     res.status(404).send({ error: 'Route not found.' });
+});
+
+apiRouter.use((_err, _req, res, _next) => {
+    res.status(500).send({ error: 'Server error encountered.' });
 });
 
 app.listen(PORT, () => {

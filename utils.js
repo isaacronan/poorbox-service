@@ -44,4 +44,22 @@ const rateLimitMiddleware = (interval, limit) => {
     };
 };
 
-module.exports = { getRandomData, rateLimitMiddleware };
+const ARRAY_POTENTIAL_MAX = 10000;
+function getArrayPotential(config) {
+    switch (config.type) {
+        case 'multi':
+            return config.values.reduce((acc, { value }) => {
+                return Math.max(getArrayPotential(value), acc);
+            }, 0);
+        case 'array':
+            return config.maxlength * Math.max(getArrayPotential(config.value), 1);
+        case 'object':
+            return config.fields.reduce((acc, { value }) => {
+                return acc + getArrayPotential(value);
+            }, 0);
+        default:
+            return 0;
+    }
+};
+
+module.exports = { getRandomData, rateLimitMiddleware, getArrayPotential, ARRAY_POTENTIAL_MAX };
