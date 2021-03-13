@@ -2,12 +2,12 @@ const yup = require('yup');
 
 const valueSchema = yup.lazy((value) => {
     switch (value?.type) {
-        case 'primitive':
-            return primitiveSchema;
+        case 'fixed':
+            return fixedSchema;
         case 'number':
             return numberSchema;
-        case 'multi':
-            return multiSchema;
+        case 'pool':
+            return poolSchema;
         case 'array':
             return arraySchema;
         case 'object':
@@ -18,11 +18,11 @@ const valueSchema = yup.lazy((value) => {
 });
 
 const baseValueSchema = yup.object().strict().shape({
-    type: yup.string().oneOf(['primitive', 'number', 'multi', 'array', 'object']).required()
+    type: yup.string().oneOf(['fixed', 'number', 'pool', 'array', 'object']).required()
 }).noUnknown();
 
-const primitiveSchema = baseValueSchema.shape({
-    type: yup.string().oneOf(['primitive']).required(),
+const fixedSchema = baseValueSchema.shape({
+    type: yup.string().oneOf(['fixed']).required(),
     values: yup.array().of(yup.mixed().defined()).min(1).required()
 });
 
@@ -33,8 +33,8 @@ const numberSchema = baseValueSchema.shape({
     scale: yup.number().integer().min(0).required()
 });
 
-const multiSchema = baseValueSchema.shape({
-    type: yup.string().oneOf(['multi']).required(),
+const poolSchema = baseValueSchema.shape({
+    type: yup.string().oneOf(['pool']).required(),
     values: yup.array().of(yup.object().shape({
         value: valueSchema,
         weight: yup.number().integer().min(0).required()
@@ -51,7 +51,7 @@ const arraySchema = baseValueSchema.shape({
 const objectSchema = baseValueSchema.shape({
     type: yup.string().oneOf(['object']).required(),
     fields: yup.array().of(yup.object().shape({
-        label: yup.string().required(),
+        label: yup.string(),
         value: valueSchema,
         presence: yup.number().min(0).max(1).required()
     }).noUnknown()).required()

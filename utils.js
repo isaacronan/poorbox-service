@@ -21,7 +21,7 @@ const post = (url, body) => new Promise((resolve, reject) => {
 });
 
 const getRandomData = (schema) => {
-    return post(`${process.env.RANDOM_SERVICE}/data`, schema);
+    return post(`${process.env.RANDOM_SERVICE}/config`, schema);
 };
 
 const rateLimitMiddleware = (interval, limit) => {
