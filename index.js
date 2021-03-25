@@ -43,6 +43,7 @@ const deleteEndpoint = (id) => {
 const getEndpointIndex = (id) => endpoints.findIndex((endpoint) => endpoint.id === id);
 const getEndpoint = (id) => endpoints[getEndpointIndex(id)] || null;
 
+app.set('trust proxy', true);
 app.use(express.json());
 app.use(BASEPATH, express.static('static', { redirect: false }));
 app.use(`${BASEPATH}/api`, apiRouter);

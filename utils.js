@@ -29,16 +29,17 @@ const rateLimitMiddleware = (interval, limit) => {
     const INTERVAL = interval;
     const LIMIT = limit;
 
-    return ({ ip }, res, next) => {
-        if (requestCounts[ip] >= LIMIT) {
+    return ({ ip, ips }, res, next) => {
+        const clientIP = ips.length ? ips[0] : ip;
+        if (requestCounts[clientIP] >= LIMIT) {
             res.status(429).json({ error: 'Rate limit reached.' });
         } else {
-            if (!requestCounts[ip]) {
+            if (!requestCounts[clientIP]) {
                 setTimeout(() => {
-                    delete requestCounts[ip];
+                    delete requestCounts[clientIP];
                 }, INTERVAL);
             }
-            requestCounts[ip] = (requestCounts[ip] || 0) + 1;
+            requestCounts[clientIP] = (requestCounts[clientIP] || 0) + 1;
             next();
         }
     };
