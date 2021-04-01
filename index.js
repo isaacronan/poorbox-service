@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const redis = require('redis');
+const { promisify } = require('util');
 
 const { valueSchema } = require('./schemae');
 const { getRandomData, rateLimitMiddleware, getArrayPotential, ARRAY_POTENTIAL_MAX } = require('./utils');
@@ -22,26 +24,9 @@ const apiRouter = express.Router();
 const PORT = 8010;
 const BASEPATH = '/poorbox';
 
-const EXPIRATION = 1000 * (Number(process.env.EXPIRATION) || 60);
+const client = redis.createClient({ host: process.env.STORE_HOST, port: Number(process.env.STORE_PORT) });
 
-const endpoints = [];
-const resetEndpointInterval = (id) => {
-    const endpoint = getEndpoint(id);
-    clearTimeout(endpoint.timeoutID);
-    endpoint.timeoutID = setTimeout(() => deleteEndpoint(id), EXPIRATION);
-};
-const deleteEndpoint = (id) => {
-    const index = getEndpointIndex(id);
-    if (index === -1) {
-        return null;
-    } else {
-        clearTimeout(endpoints[index].timeoutID);
-        endpoints.splice(index, 1);
-        return id;
-    }
-};
-const getEndpointIndex = (id) => endpoints.findIndex((endpoint) => endpoint.id === id);
-const getEndpoint = (id) => endpoints[getEndpointIndex(id)] || null;
+const EXPIRATION = (Number(process.env.EXPIRATION) || 60);
 
 app.set('trust proxy', true);
 app.use(express.json());
@@ -68,7 +53,7 @@ apiRouter.post('/test', rateLimitMiddleware(10000, 30), (req, res, next) => {
     }
 });
 
-apiRouter.post('/config', (req, res) => {
+apiRouter.post('/config', async (req, res) => {
     const isValid = valueSchema.isValidSync(req.body);
     if (isValid) {
         const potential = getArrayPotential(req.body);
@@ -78,39 +63,51 @@ apiRouter.post('/config', (req, res) => {
             let id = null;
             do {
                 id = crypto.randomBytes(4).toString('hex')
-            } while(endpoints.findIndex((endpoint) => endpoint.id === id) !== -1);
-            endpoints.push({ schema: req.body, id });
-            resetEndpointInterval(id);
-            res.json({ message: 'Created endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id });
+            } while(await promisify(client.exists).call(client, `endpoint:${id}`));
+
+            const multi = client.multi()
+                .set(`endpoint:${id}`, JSON.stringify(req.body))
+                .expire(`endpoint:${id}`, EXPIRATION)
+            await promisify(multi.exec).call(multi);
+
+            res.json({ message: 'Created endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION, id });
         }
     } else {
         res.status(400).json({ error: 'Format is invalid.' });
     }
 });
 
-apiRouter.delete('/config/:id', (req, res) => {
-    if (deleteEndpoint(req.params.id)) {
+apiRouter.delete('/config/:id', async (req, res) => {
+    if (await promisify(client.del).call(client, `endpoint:${req.params.id}`)) {
         res.json({ message: 'Deleted endpoint.' })
     } else {
         res.status(404).json({ error: 'Endpoint not found.' });
     }
 });
 
-apiRouter.get('/config/:id', (req, res) => {
-    const endpoint = getEndpoint(req.params.id);
+apiRouter.get('/config/:id', async (req, res) => {
+    const id = req.params.id;
+    const multi = client.multi()
+        .get(`endpoint:${id}`)
+        .ttl(`endpoint:${id}`)
+    const [endpoint, expiration] = await promisify(multi.exec).call(multi);
     if (endpoint) {
-        const { id, schema } = endpoint;
-        res.json({ message: 'Found endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION / 1000, id, schema });
+        const schema = JSON.parse(endpoint);
+        res.json({ message: 'Found endpoint.', url: `${BASEPATH}/api/${id}`, expiration, id, schema });
     } else {
         res.status(404).json({ error: 'Endpoint not found.' });
     }
 });
 
-apiRouter.get('/:id', cors(), rateLimitMiddleware(10000, 10), (req, res, next) => {
-    const endpoint = getEndpoint(req.params.id);
+apiRouter.get('/:id', cors(), rateLimitMiddleware(10000, 10), async (req, res, next) => {
+    const id = req.params.id;
+    const multi = client.multi()
+        .get(`endpoint:${id}`)
+        .expire(`endpoint:${id}`, EXPIRATION)
+    const [endpoint] = await promisify(multi.exec).call(multi);
     if (endpoint) {
-        resetEndpointInterval(req.params.id);
-        getRandomData(endpoint.schema).then(data => {
+        const schema = JSON.parse(endpoint);
+        getRandomData(schema).then(data => {
             res.json(data);
         }).catch(next);
     } else {
