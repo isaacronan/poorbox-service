@@ -24,7 +24,11 @@ const apiRouter = express.Router();
 const PORT = 8010;
 const BASEPATH = '/poorbox';
 
-const client = redis.createClient({ host: process.env.STORE_HOST, port: Number(process.env.STORE_PORT) });
+const client = redis.createClient({
+    host: process.env.STORE_HOST,
+    port: Number(process.env.STORE_PORT),
+    retry_strategy: () => 1000
+});
 
 const EXPIRATION = (Number(process.env.EXPIRATION) || 60);
 
@@ -63,11 +67,11 @@ apiRouter.post('/config', async (req, res) => {
             let id = null;
             do {
                 id = crypto.randomBytes(4).toString('hex')
-            } while(await promisify(client.exists).call(client, `endpoint:${id}`));
+            } while(await promisify(client.exists).call(client, `pb:endpoint:${id}`));
 
             const multi = client.multi()
-                .set(`endpoint:${id}`, JSON.stringify(req.body))
-                .expire(`endpoint:${id}`, EXPIRATION)
+                .set(`pb:endpoint:${id}`, JSON.stringify(req.body))
+                .expire(`pb:endpoint:${id}`, EXPIRATION)
             await promisify(multi.exec).call(multi);
 
             res.json({ message: 'Created endpoint.', url: `${BASEPATH}/api/${id}`, expiration: EXPIRATION, id });
@@ -78,7 +82,7 @@ apiRouter.post('/config', async (req, res) => {
 });
 
 apiRouter.delete('/config/:id', async (req, res) => {
-    if (await promisify(client.del).call(client, `endpoint:${req.params.id}`)) {
+    if (await promisify(client.del).call(client, `pb:endpoint:${req.params.id}`)) {
         res.json({ message: 'Deleted endpoint.' })
     } else {
         res.status(404).json({ error: 'Endpoint not found.' });
@@ -88,8 +92,8 @@ apiRouter.delete('/config/:id', async (req, res) => {
 apiRouter.get('/config/:id', async (req, res) => {
     const id = req.params.id;
     const multi = client.multi()
-        .get(`endpoint:${id}`)
-        .ttl(`endpoint:${id}`)
+        .get(`pb:endpoint:${id}`)
+        .ttl(`pb:endpoint:${id}`)
     const [endpoint, expiration] = await promisify(multi.exec).call(multi);
     if (endpoint) {
         const schema = JSON.parse(endpoint);
@@ -102,8 +106,8 @@ apiRouter.get('/config/:id', async (req, res) => {
 apiRouter.get('/:id', cors(), rateLimitMiddleware(10000, 10), async (req, res, next) => {
     const id = req.params.id;
     const multi = client.multi()
-        .get(`endpoint:${id}`)
-        .expire(`endpoint:${id}`, EXPIRATION)
+        .get(`pb:endpoint:${id}`)
+        .expire(`pb:endpoint:${id}`, EXPIRATION)
     const [endpoint] = await promisify(multi.exec).call(multi);
     if (endpoint) {
         const schema = JSON.parse(endpoint);
