@@ -21,7 +21,7 @@ const render = () => {
 
 const app = express();
 const apiRouter = express.Router();
-const PORT = 8010;
+const PORT = process.env.PORT || 8010;
 const BASEPATH = '/poorbox';
 
 const client = redis.createClient({
